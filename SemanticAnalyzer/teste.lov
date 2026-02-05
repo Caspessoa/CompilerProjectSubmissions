@@ -1,4 +1,27 @@
-main () begin
-  let Float x;
-  x : 10.5;
+main()
+begin
+    let Float result;
+    let Float valor1;
+    let Float valor2;
+    valor1 := 10;
+    valor2 := 15;
+    result := magnitudeSUB2Valores(valor1, valor2);
+    print result;
+end
+
+def Float magnitudeSUB2Valores(Float var1, Float var2)
+begin
+    let Float magnitude;
+    let Bool valid;
+    valid := false;
+    if (var1 > var2)
+        begin 
+        valid := true;
+        magnitude := (var1 - var2);
+        print valid;
+        return magnitude;
+        end;
+    magnitude := (var2 - var1);
+    print valid;
+    return magnitude;
 end

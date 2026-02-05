@@ -1,30 +1,35 @@
 PARSER_BEGIN(Lovelace)
 import java.io.*;
+import java.util.ArrayList;
+import ast.*; 
+
 public class Lovelace {
 
   public static void main(String args[]) throws ParseException,IOException {
-    
- 	Lovelace analisador = new Lovelace(new FileInputStream(args[0]));
-	try {
-	Prog arv = analisador.Lovelace(); // Chama a regra inicial da gramática
-		System.out.println("Analise sintatica concluida com sucesso.");
-	} catch (ParseException e) {
-		System.err.println("Erro sintatico: " + e.getMessage());
-	}
+    try {
+        Lovelace analisador = new Lovelace(new FileInputStream(args[0]));
+        Prog arv = analisador.Lovelace(); 
+        
+        System.out.println("Analise sintatica concluida com sucesso.");
+        System.out.println("-----------------------------------------");
+        
+        ArvoreDebug.print(arv);
+        GeraC gerador = new GeraC();
+        gerador.codegen(arv);
+        
+    } catch (ParseException e) {
+        System.err.println("Erro sintatico: " + e.getMessage());
+    } catch (FileNotFoundException e) {
+        System.err.println("Arquivo nao encontrado: " + args[0]);
+    }
   }
-
 }
-
 PARSER_END(Lovelace)
 
 SKIP :
 {
-  " "
-| "\t"
-| "\n"
-| "\r"
+  " " | "\t" | "\n" | "\r"
 }
-
 
 TOKEN :
 {
@@ -59,185 +64,257 @@ TOKEN :
 | <DEF: "def">
 }
 
-
 TOKEN :
 {
   <NUMLITERAL: (["0"-"9"])+ ( "." (["0"-"9"])+ )? ( "E" (["+","-"])? (["0"-"9"])+ )? >
-
- |< ID: ["a"-"z","A"-"Z"] ( ["a"-"z","A"-"Z","0"-"9"])* ( ["_"] ( ["a"-"z","A"-"Z","0"-"9"])*)*>
- 
+| < ID: ["a"-"z","A"-"Z"] ( ["a"-"z","A"-"Z","0"-"9"])* ( ["_"] ( ["a"-"z","A"-"Z","0"-"9"])*)*>
 }
 
-/* LOVELACE -> MAIN FUNC? */
+/* * LOVELACE -> MAIN FUNC
+ * Cria a raiz do programa (Prog) contendo o Main e a lista de Funções
+ */
 Prog Lovelace() :
-{Main main = null; ArrayList<Fun> funs = null;}
 {
-    main=Main() funs=Func() // sem "?" pois a regra Func já garante essa restrição
-    {return new Prog(main,funs);}
+    Main main = null; 
+    ArrayList<Fun> funs = null;
+}
+{
+    main=Main() 
+    funs=Func() 
+    { return new Prog(main, funs); }
     <EOF>
 }
 
-/* MAIN -> "main" "("")" "begin" VARDECL SEQCOMANDOS "end" */
+/* * MAIN -> "main" "(" ")" "begin" VARDECL SEQCOMANDOS "end" 
+ * Retorna o objeto Main preenchido
+ */
 Main Main() :
 {
-    // Variáveis locais para armazenar os filhos do nó
     ArrayList<VarDecl> vars = new ArrayList<VarDecl>();
     ArrayList<Comando> coms = new ArrayList<Comando>();
 }
 {
     <MAIN> <APAR> <FPAR> <BEGIN>
-    
-    // Passa o array para ser preenchido dentro do método VarDecl
-    VarDecl(vars) 
-    
-    // Passa o array para ser preenchido dentro do método SeqComandos
-    SeqComandos(coms) 
-    
+    VarDecl(vars)       // Preenche a lista de variáveis
+    SeqComandos(coms)   // Preenche a lista de comandos
     <END>
     
-    // Retorna o nó da árvore pronto
-    { return new Main(vars, coms); }
+    { return new Main(vars, coms); } 
 }
 
-/* VARDECL -> VARDECL "let" TIPO TOKEN_id ";" | vazio */
-// Recebe a lista 'vars' instanciada no Main e adiciona itens nela
+/* * VARDECL -> ( "let" TIPO ID ";" )* * Preenche a lista passada por parâmetro
+ */
 void VarDecl(ArrayList<VarDecl> vars) :
 {
-    Token tType, tId;
+    Token tId;
     String tipo;
 }
 {
     (
       <LET> 
-      tipo=Tipo() // Tipo() agora deve retornar String
+      tipo=Tipo() 
       tId=<ID> 
       <PV>
-      // Ação Java: Adiciona na lista
       { vars.add(new VarDecl(tipo, tId.image)); }
     )*
 }
 
 /* TIPO -> "Float" | "Bool" | "Void" */
 String Tipo() :
-{String r = null;}
+{ Token t; }
 {
-    (<FLOAT> {r = "Float";})| (<BOOL> {r = "Bool";}) | (<VOID> {r = "Void";})
-
-    {return r;}
+    ( t=<FLOAT> | t=<BOOL> | t=<VOID> )
+    { return t.image; }
 }
 
-/* * SEQCOMANDOS -> SEQCOMANDOS COMANDO | vazio
- * Removida recursão à esquerda: ( COMANDO )*
+/* * SEQCOMANDOS -> ( COMANDO )* * Preenche a lista de comandos passada por parâmetro
  */
 void SeqComandos(ArrayList<Comando> coms) :
-{Comando c = null; }
+{ Comando c; }
 {
-    (c=Comando()  {coms.add(c);})*
+    (
+        c=Comando() 
+        { coms.add(c); }
+    )*
 }
 
+/* * COMANDO: Trata Atribuição, Chamada, If, While, Print, Return
+ * Retorna um objeto genérico 'Comando'
+ */
 Comando Comando() :
 {
-    Token t;
+    Token t; // Usado para capturar a linha e o texto
     Exp e = null;
     ArrayList<Exp> args = null;
     ArrayList<Comando> bloco = null;
+    String varNome;
 }
 {
-    // Captura o token ID primeiro
+    // Comandos que começam com ID (Atribuição ou Chamada de Função)
     t=<ID> 
     (
-        // Caso Atribuição: ID := Exp ;
+        // Atribuição: ID := Exp ;
         ( <ATR> e=Exp() <PV> )
         { return new CAtribuicao(t.beginLine, t.image, e); }
         
         |
-        // Caso Chamada de Função: ID ( args ) ;
+        // Chamada de Função (procedure): ID ( args ) ;
         ( <APAR> [ args=ListaExp() ] <FPAR> <PV> )
         { 
             if (args == null) args = new ArrayList<Exp>();
-            return new CChamadaFun(t.beginLine, t.image, args); 
+            return new CChamadaFun(t.beginLine, t.image, args);
         }
     )
+    
     |
     // Caso IF
-    <IF> e=Exp() <BEGIN> { bloco = new ArrayList<Comando>(); } SeqComandos(bloco) <END> <PV>
-    { return new CIf(token.beginLine, e, bloco); } // token.beginLine pega a linha do IF
+    t=<IF> e=Exp() <BEGIN> 
+    { bloco = new ArrayList<Comando>(); } 
+    SeqComandos(bloco) 
+    <END> <PV>
+    { return new CIf(t.beginLine, e, bloco); }
 
-    // Caso WHILE
-    <WHILE> e=Exp() <BEGIN> { bloco = new ArrayList<Comando>(); } SeqComandos(bloco) <END> <PV>
-    { return new CWhile(token.beginLine, e, bloco); }
-
-    // Caso PRINT
-    <PRINT> e=Exp() <PV>
-    { return new CIf(token.beginLine, e); } 
-
-    // Caso RETURN
-    <RETURN> e=Exp() <PV>
-    { return new CIf(token.beginLine, e); }
-
-}
-
-/* EXP -> "(" EXP OP EXP ")" | FATOR */
-Exp Exp() :
-{Exp e1 = null; Exp e2 = null; String op = null;}
-{
-    ( <APAR> e1=Exp() op=Op() e2=Exp() <FPAR> )
-    {return new EOpExp(op, e1, e2);}
     |
-    Fator()
+    // Caso WHILE
+    t=<WHILE> e=Exp() <BEGIN> 
+    { bloco = new ArrayList<Comando>(); } 
+    SeqComandos(bloco) 
+    <END> <PV>
+    { return new CWhile(t.beginLine, e, bloco); }
+
+    |
+    // Caso PRINT
+    t=<PRINT> e=Exp() <PV>
+    { return new CPrint(t.beginLine, e); }
+
+    |
+    // Caso RETURN
+    t=<RETURN> e=Exp() <PV>
+    { return new CReturn(t.beginLine, e); }
 }
 
-/* * FATOR -> TOKEN_id | TOKEN_id "(" LISTAEXP? ")" | TOKEN_numliteral | "true" | "false"
- * Resolvida ambiguidade do TOKEN_id com fatoração.
+/* * EXP -> "(" EXP OP EXP ")" | FATOR 
+ * Retorna um nó de Expressão
+ */
+Exp Exp() :
+{
+    Exp e1, e2;
+    String op;
+    Exp result;
+}
+{
+    // Expressão binária com parenteses obrigatórios (conforme sua gramática original)
+    ( <APAR> e1=Exp() op=Op() e2=Exp() <FPAR> )
+    { return new EOpExp(op, e1, e2); } // Cria expressão de operação
+    |
+    // Fator simples (número, variável, boolean)
+    result=Fator()
+    { return result; }
+}
+
+/* * FATOR -> ID | ID(args) | Num | True | False 
  */
 Exp Fator() :
-{ArrayListExp> args = null;}
 {
-    (
-        /* * Agrupa "TOKEN_id" e "TOKEN_id ( LISTAEXP? )" */
-        <ID> ( <APAR> ( args=ListaExp() )? <FPAR> )?
-        {return new }
+    Token t;
+    ArrayList<Exp> args = null;
+}
+{
+    // Identificador (Variável ou Chamada de Função dentro de expressão)
+    t=<ID>
+    ( 
+        // Se tiver '(', é chamada de função retornando valor
+        ( <APAR> [ args=ListaExp() ] <FPAR> )
+        { 
+            if (args == null) args = new ArrayList<Exp>();
+            return new EChamadaFun(t.image, args); 
+        }
+        |
+        // Se não, é apenas uma variável
+        { return new EVar(t.image); } 
     )
     |
-    <NUMLITERAL>
+    // Literal Numérico
+    t=<NUMLITERAL>
+    { return new EFloat(Float.parseFloat(t.image)); } //  Converte String para float
     |
     <TRUE>
+    { return new ETrue(); } 
     |
     <FALSE>
+    { return new EFalse(); } 
 }
 
-/* OP -> "+" | "-" | "*" | "/" | "&&" | "||" | "<" | ">" | "==" */
-void Op() :
-{}
+/* OP -> Retorna a string do operador */
+String Op() :
+{ Token t; }
 {
-    <SOMA> | <SUB> | <MULT> | <DIV> | <AND> | <OR> | <MENOR> | <MAIOR> | <IGUAL>
+    ( t=<SOMA> | t=<SUB> | t=<MULT> | t=<DIV> | t=<AND> | t=<OR> | t=<MENOR> | t=<MAIOR> | t=<IGUAL> )
+    { return t.image; }
 }
 
-/* * LISTAEXP -> EXP | LISTAEXP "," EXP
- * Removida recursão à esquerda: EXP ( "," EXP )*
+/* * LISTAEXP -> EXP ( "," EXP )* * Retorna uma lista de expressões (usado em argumentos de chamada)
  */
-ArrayListExp> ListaExp() :
-{}
+ArrayList<Exp> ListaExp() :
 {
-    Exp() ( <VIRGULA> Exp() )*
+    ArrayList<Exp> lista = new ArrayList<Exp>();
+    Exp e;
+}
+{
+    e=Exp() { lista.add(e); } 
+    ( <VIRGULA> e=Exp() { lista.add(e); } )*
+    { return lista; }
 }
 
-/* * FUNC -> FUNC "def" ... | "def" ... 
- * Removida recursão à esquerda: ( "def" ... )*
+/* * FUNC -> ( "def" ... )* * Retorna a lista de funções declaradas no programa
  */
-void Func() :
-{}
+ArrayList<Fun> Func() :
+{
+    ArrayList<Fun> funs = new ArrayList<Fun>();
+    String tipoRetorno;
+    Token id;
+    ArrayList<ParamFormalFun> params = null; //  Classe correta para parâmetros
+    ArrayList<VarDecl> vars;
+    ArrayList<Comando> body;
+}
 {
     (
-        <DEF> Tipo() <ID> <APAR> ( ListaArg() )? <FPAR> <BEGIN> VarDecl() SeqComandos() <END>
+        <DEF> tipoRetorno=Tipo() id=<ID> <APAR> [ params=ListaArg() ] <FPAR> 
+        <BEGIN> 
+        { 
+            // Instancia as listas locais para cada função
+            vars = new ArrayList<VarDecl>(); 
+            body = new ArrayList<Comando>();
+            if (params == null) params = new ArrayList<ParamFormalFun>();
+        }
+        VarDecl(vars) 
+        SeqComandos(body) 
+        <END>
+        
+        // Adiciona a nova função na lista
+        { funs.add(new Fun(id.image, params, tipoRetorno, vars, body)); } // 
     )*
+    
+    { return funs; }
 }
 
-/* * LISTAARG -> TIPO TOKEN_id | LISTAARG "," TIPO TOKEN_id
- * Removida recursão à esquerda: TIPO ID ( "," TIPO ID )*
+/* * LISTAARG -> TIPO ID ( "," TIPO ID )*
+ * Retorna lista de parametros formais
  */
-void ListaArg() :
-{}
+ArrayList<ParamFormalFun> ListaArg() :
 {
-    Tipo() <ID> ( <VIRGULA> Tipo() <ID> )*
+    ArrayList<ParamFormalFun> lista = new ArrayList<ParamFormalFun>();
+    String tipo;
+    Token id;
+}
+{
+    tipo=Tipo() id=<ID> 
+    { lista.add(new ParamFormalFun(tipo, id.image)); } // 
+    
+    ( 
+      <VIRGULA> tipo=Tipo() id=<ID> 
+      { lista.add(new ParamFormalFun(tipo, id.image)); } 
+    )*
+    
+    { return lista; }
 }
