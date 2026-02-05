@@ -6,7 +6,7 @@ public class Lovelace {
     
  	Lovelace analisador = new Lovelace(new FileInputStream(args[0]));
 	try {
-	analisador.Lovelace(); // Chama a regra inicial da gramática
+	Prog arv = analisador.Lovelace(); // Chama a regra inicial da gramática
 		System.out.println("Analise sintatica concluida com sucesso.");
 	} catch (ParseException e) {
 		System.err.println("Erro sintatico: " + e.getMessage());
@@ -69,10 +69,11 @@ TOKEN :
 }
 
 /* LOVELACE -> MAIN FUNC? */
-void Lovelace() :
-{}
+Prog Lovelace() :
+{Main main = null; ArrayList<Fun> funs = null;}
 {
-    Main() Func() // sem "?" pois a regra Func já garante essa restrição
+    main=Main() funs=Func() // sem "?" pois a regra Func já garante essa restrição
+    {return new Prog(main,funs);}
     <EOF>
 }
 
@@ -98,7 +99,7 @@ Main Main() :
     { return new Main(vars, coms); }
 }
 
-/* * VARDECL -> VARDECL "let" TIPO TOKEN_id ";" | vazio
+/* VARDECL -> VARDECL "let" TIPO TOKEN_id ";" | vazio */
 // Recebe a lista 'vars' instanciada no Main e adiciona itens nela
 void VarDecl(ArrayList<VarDecl> vars) :
 {
@@ -117,19 +118,21 @@ void VarDecl(ArrayList<VarDecl> vars) :
 }
 
 /* TIPO -> "Float" | "Bool" | "Void" */
-void Tipo() :
-{}
+String Tipo() :
+{String r = null;}
 {
-    <FLOAT> | <BOOL> | <VOID>
+    (<FLOAT> {r = "Float";})| (<BOOL> {r = "Bool";}) | (<VOID> {r = "Void";})
+
+    {return r;}
 }
 
 /* * SEQCOMANDOS -> SEQCOMANDOS COMANDO | vazio
  * Removida recursão à esquerda: ( COMANDO )*
  */
-void SeqComandos() :
-{}
+void SeqComandos(ArrayList<Comando> coms) :
+{Comando c = null; }
 {
-    (Comando())*
+    (c=Comando()  {coms.add(c);})*
 }
 
 Comando Comando() :
@@ -159,15 +162,27 @@ Comando Comando() :
     // Caso IF
     <IF> e=Exp() <BEGIN> { bloco = new ArrayList<Comando>(); } SeqComandos(bloco) <END> <PV>
     { return new CIf(token.beginLine, e, bloco); } // token.beginLine pega a linha do IF
-  
-    // ... Repetir lógica para While, Print, etc.
+
+    // Caso WHILE
+    <WHILE> e=Exp() <BEGIN> { bloco = new ArrayList<Comando>(); } SeqComandos(bloco) <END> <PV>
+    { return new CWhile(token.beginLine, e, bloco); }
+
+    // Caso PRINT
+    <PRINT> e=Exp() <PV>
+    { return new CIf(token.beginLine, e); } 
+
+    // Caso RETURN
+    <RETURN> e=Exp() <PV>
+    { return new CIf(token.beginLine, e); }
+
 }
 
 /* EXP -> "(" EXP OP EXP ")" | FATOR */
-void Exp() :
-{}
+Exp Exp() :
+{Exp e1 = null; Exp e2 = null; String op = null;}
 {
-    ( <APAR> Exp() Op() Exp() <FPAR> )
+    ( <APAR> e1=Exp() op=Op() e2=Exp() <FPAR> )
+    {return new EOpExp(op, e1, e2);}
     |
     Fator()
 }
@@ -175,12 +190,13 @@ void Exp() :
 /* * FATOR -> TOKEN_id | TOKEN_id "(" LISTAEXP? ")" | TOKEN_numliteral | "true" | "false"
  * Resolvida ambiguidade do TOKEN_id com fatoração.
  */
-void Fator() :
-{}
+Exp Fator() :
+{ArrayListExp> args = null;}
 {
     (
         /* * Agrupa "TOKEN_id" e "TOKEN_id ( LISTAEXP? )" */
-        <ID> ( <APAR> ( ListaExp() )? <FPAR> )?
+        <ID> ( <APAR> ( args=ListaExp() )? <FPAR> )?
+        {return new }
     )
     |
     <NUMLITERAL>
@@ -200,7 +216,7 @@ void Op() :
 /* * LISTAEXP -> EXP | LISTAEXP "," EXP
  * Removida recursão à esquerda: EXP ( "," EXP )*
  */
-void ListaExp() :
+ArrayListExp> ListaExp() :
 {}
 {
     Exp() ( <VIRGULA> Exp() )*
