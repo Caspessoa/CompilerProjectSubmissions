@@ -14,8 +14,16 @@ public class Lovelace {
         System.out.println("-----------------------------------------");
         
         ArvoreDebug.print(arv);
+
+        System.out.println("-----------------------------------------\n");
         GeraC gerador = new GeraC();
         gerador.codegen(arv);
+
+        GeraArquivoC ger = new GeraArquivoC();
+        String nomeArquivoC = args[0].replace(".lov", ".c");
+        ger.codegen(arv, nomeArquivoC);
+
+
         
     } catch (ParseException e) {
         System.err.println("Erro sintatico: " + e.getMessage());
