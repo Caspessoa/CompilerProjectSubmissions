@@ -135,6 +135,24 @@ public class GeraArquivoC {
             }
             writer.println(");");
         }
+        // adicionar o read --- NOVO
+        else if (c instanceof CReadInput) {
+            CReadInput cri = (CReadInput) c;
+            String tipo = inferirTipoVariavel(cri.var, vars, params);
+            
+            writer.print(indent + "scanf(");
+            
+            // Determina o formato correto baseado no tipo da variável
+            if (tipo.equals("Bool") || tipo.equals("Int")) {
+                writer.print("\"%d\", &" + cri.var);
+            } else if (tipo.equals("Float")) {
+                writer.print("\"%f\", &" + cri.var);
+            } else {
+                // Tipo padrão caso não seja identificado
+                writer.print("\"%f\", &" + cri.var);
+            }
+            writer.println(");");
+        }
         else if (c instanceof CReturn) {
             CReturn cr = (CReturn) c;
             writer.print(indent + "return ");
@@ -216,6 +234,27 @@ public class GeraArquivoC {
             }
         }
 
+        return "Float";
+    }
+
+    //Adicionado 
+    // Percorre as declarações de variáveis locais e parâmetros para encontrar o tipo
+    private String inferirTipoVariavel(String nomeVar, ArrayList<VarDecl> vars, ArrayList<ParamFormalFun> params) {
+        // Busca nas variáveis locais
+        if (vars != null) {
+            for (VarDecl v : vars) {
+                if (v.var.equals(nomeVar)) return v.type;
+            }
+        }
+        
+        // Busca nos parâmetros da função
+        if (params != null) {
+            for (ParamFormalFun p : params) {
+                if (p.var.equals(nomeVar)) return p.type;
+            }
+        }
+        
+        // Tipo padrão caso não encontre
         return "Float";
     }
 

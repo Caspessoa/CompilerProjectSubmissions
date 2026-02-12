@@ -3,8 +3,8 @@ begin
     let Float result;
     let Float valor1;
     let Float valor2;
-    valor1 := 10;
-    valor2 := 15;
+    valor1 := 15;
+    valor2 := 10;
     result := magnitudeSUB2Valores(valor1, valor2);
     print result;
 end

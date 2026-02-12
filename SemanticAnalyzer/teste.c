@@ -7,8 +7,8 @@ int main() {
 	float result;
 	float valor1;
 	float valor2;
-	valor1 = 10.0;
-	valor2 = 15.0;
+	valor1 = 15.0;
+	valor2 = 10.0;
 	result = magnitudeSUB2Valores(valor1, valor2);
 	printf("%f\n", (float)(result));
 	return 0;

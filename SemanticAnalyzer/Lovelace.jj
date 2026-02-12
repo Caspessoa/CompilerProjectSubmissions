@@ -16,8 +16,8 @@ public class Lovelace {
         ArvoreDebug.print(arv);
 
         System.out.println("-----------------------------------------\n");
-        GeraC gerador = new GeraC();
-        gerador.codegen(arv);
+        //GeraC gerador = new GeraC();
+        //gerador.codegen(arv);
 
         GeraArquivoC ger = new GeraArquivoC();
         String nomeArquivoC = args[0].replace(".lov", ".c");
@@ -151,19 +151,27 @@ void SeqComandos(ArrayList<Comando> coms) :
  */
 Comando Comando() :
 {
-    Token t; // Usado para capturar a linha e o texto
+    Token t;
     Exp e = null;
     ArrayList<Exp> args = null;
     ArrayList<Comando> bloco = null;
     String varNome;
 }
 {
-    // Comandos que começam com ID (Atribuição ou Chamada de Função)
+    // Comandos que começam com ID 
     t=<ID> 
     (
-        // Atribuição: ID := Exp ;
-        ( <ATR> e=Exp() <PV> )
-        { return new CAtribuicao(t.beginLine, t.image, e); }
+        // O token <ATR> (:=) inicia tanto Atribuição quanto Read
+        <ATR> 
+        (
+            // CASO READ: ID := read();  
+            <READ> <APAR> <FPAR> <PV>
+            { return new CReadInput(t.beginLine, t.image); }
+            |
+            // CASO ATRIBUIÇÃO: ID := Exp;
+            e=Exp() <PV>
+            { return new CAtribuicao(t.beginLine, t.image, e); }
+        )
         
         |
         // Chamada de Função (procedure): ID ( args ) ;

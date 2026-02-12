@@ -1,0 +1,49 @@
+main()
+begin
+    let Float numero;
+    let Float resultado_fatorial;
+    let Bool entrada_valida;
+    numero := read();
+    print numero;
+    entrada_valida := validar_entrada(numero);
+    if entrada_valida begin
+        resultado_fatorial := fatorial(numero);
+        print resultado_fatorial;
+    end;
+end
+
+def Float fatorial(Float var) begin
+    let Float resultado;
+    let Float contador;
+    let Bool valido;
+    valido := false;
+    if (var > 0.0)
+        begin
+        valido := true;
+        end;
+    if valido begin
+        resultado := 1.0;
+        contador := 1.0;
+        while (contador < var) begin
+            contador := (contador + 1.0);
+            resultado := (resultado * contador);
+        end;
+    end;
+    return resultado;
+end
+
+def Bool validar_entrada(Float valor) begin
+    let Bool positivo;
+    let Bool menor_limite;
+    positivo := false;
+    if (valor > 0.0)
+        begin
+        positivo := true;
+        end;
+    menor_limite := false;
+    if (valor < 20.0)
+        begin
+        menor_limite := true;
+        end;
+    return (positivo && menor_limite);
+end
